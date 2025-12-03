@@ -1,7 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { Rnd } from 'react-rnd';
 import axios from 'axios';
+import { get, set, del } from 'idb-keyval'; 
 import "./App.css"; 
 
 // Initialize PDF Worker
@@ -19,10 +20,11 @@ const genId = () => {
 const Icons = {
   Trash: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>,
   Copy: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>,
+  Reset: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>,
+  Upload: () => <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500 mb-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>,
   AlignLeft: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="17" y1="10" x2="3" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="17" y1="18" x2="3" y2="18"></line></svg>,
   AlignCenter: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="10" x2="6" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="18" y1="18" x2="6" y2="18"></line></svg>,
   AlignRight: () => <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="21" y1="10" x2="7" y2="10"></line><line x1="21" y1="6" x2="3" y2="6"></line><line x1="21" y1="14" x2="3" y2="14"></line><line x1="21" y1="18" x2="7" y2="18"></line></svg>,
-  Upload: () => <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500 mb-4"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
 };
 
 const FONT_SIZES = Array.from({ length: 20 }, (_, i) => i + 6);
@@ -53,6 +55,7 @@ const DraggableField = ({ field, isSelected, onSelect, onUpdate, onDelete, onDup
           style={{ width: 'max-content' }}
           onMouseDown={(e) => e.stopPropagation()} 
         >
+          {/* Row 1: Name, Required, Duplicate, Delete */}
           <div className="flex items-center gap-2 border-b border-gray-100 pb-2">
             <div className="flex flex-col">
                <label className="text-[9px] text-gray-400 font-bold uppercase">Field Name</label>
@@ -75,6 +78,7 @@ const DraggableField = ({ field, isSelected, onSelect, onUpdate, onDelete, onDup
             <button onClick={() => onDelete(field.id)} className="p-1 hover:bg-red-50 rounded text-red-500"><Icons.Trash /></button>
           </div>
 
+          {/* Row 2: Text Styling (Font Size & Alignment) - RESTORED */}
           {field.type === 'text' && (
             <div className="flex items-center gap-2">
               <select 
@@ -84,12 +88,15 @@ const DraggableField = ({ field, isSelected, onSelect, onUpdate, onDelete, onDup
               >
                 {FONT_SIZES.map(size => <option key={size} value={size}>{size}px</option>)}
               </select>
+
+              {/* Alignment Buttons */}
               <div className="flex bg-gray-100 rounded p-0.5">
                 {['left', 'center', 'right'].map(align => (
                   <button 
                     key={align}
                     onClick={() => onUpdate(field.id, { align })}
                     className={`p-1 rounded ${field.align === align ? 'bg-white shadow text-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+                    title={`Align ${align}`}
                   >
                     {align === 'left' && <Icons.AlignLeft />}
                     {align === 'center' && <Icons.AlignCenter />}
@@ -102,6 +109,7 @@ const DraggableField = ({ field, isSelected, onSelect, onUpdate, onDelete, onDup
         </div>
       )}
 
+      {/* Field Visuals */}
       <div 
         className={`
           w-full h-full flex items-center px-1 cursor-move overflow-hidden
@@ -115,7 +123,7 @@ const DraggableField = ({ field, isSelected, onSelect, onUpdate, onDelete, onDup
             className="w-full text-blue-900 opacity-80 whitespace-nowrap overflow-hidden"
             style={{ 
               fontSize: `${field.fontSize}px`, 
-              textAlign: field.align,
+              textAlign: field.align, // Ensure visual alignment updates
             }}
           >
             Sample Text
@@ -137,13 +145,45 @@ function App() {
   const [fields, setFields] = useState([]);
   const [selectedFieldId, setSelectedFieldId] = useState(null);
   const [addingMode, setAddingMode] = useState(null); 
+  const [isLoading, setIsLoading] = useState(true);
   const pageRefs = useRef({});
-  const fileInputRef = useRef(null); // Reference for hidden input
+  const fileInputRef = useRef(null); 
+
+  // --- STATE RESTORATION ON LOAD ---
+  useEffect(() => {
+    const loadState = async () => {
+      try {
+        const savedFile = await get('pdf_file');
+        const savedFields = localStorage.getItem('pdf_fields');
+        if (savedFile && savedFile instanceof Blob) {
+          setFile(savedFile);
+          if (savedFields) {
+            setFields(JSON.parse(savedFields));
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load saved state:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadState();
+  }, []);
+
+  // --- AUTO-SAVE EFFECTS ---
+  useEffect(() => {
+    if (fields.length > 0) localStorage.setItem('pdf_fields', JSON.stringify(fields));
+  }, [fields]);
+
+  useEffect(() => {
+    if (file) set('pdf_file', file);
+  }, [file]);
 
   // --- FILE HANDLING ---
-  const handleFileChange = (e) => {
-    const selectedFile = e.target.files[0];
+  const handleNewFile = async (selectedFile) => {
     if (selectedFile && selectedFile.type === 'application/pdf') {
+      await del('pdf_file');
+      localStorage.removeItem('pdf_fields');
       setFile(selectedFile);
       setFields([]);
       setAddingMode(null);
@@ -152,15 +192,16 @@ function App() {
     }
   };
 
-  const handleDrop = (e) => {
-    e.preventDefault();
-    const selectedFile = e.dataTransfer.files[0];
-    if (selectedFile && selectedFile.type === 'application/pdf') {
-      setFile(selectedFile);
+  const handleFileChange = (e) => handleNewFile(e.target.files[0]);
+  const handleDrop = (e) => { e.preventDefault(); handleNewFile(e.dataTransfer.files[0]); };
+
+  const handleReset = async () => {
+    if(window.confirm("Are you sure? This will clear all current progress.")) {
+      await del('pdf_file');
+      localStorage.removeItem('pdf_fields');
+      setFile(null);
       setFields([]);
-      setAddingMode(null);
-    } else {
-      alert("Please upload a valid PDF file.");
+      setNumPages(null);
     }
   };
 
@@ -172,11 +213,9 @@ function App() {
       setSelectedFieldId(null);
       return;
     }
-
     const rect = e.currentTarget.getBoundingClientRect();
     const x = e.clientX - rect.left;
     const y = e.clientY - rect.top;
-
     const id = genId();
     const w = addingMode === 'text' ? 160 : 30;
     const h = 30;
@@ -187,14 +226,12 @@ function App() {
       page: pageIndex, 
       x: x - (w / 2), 
       y: y - (h / 2), 
-      w: w, 
-      h: h,
+      w: w, h: h,
       name: `field_${id.toString().slice(0, 8)}`,
       required: false,
       fontSize: 11,
-      align: 'left'
+      align: 'left' // Default alignment
     }]);
-
     setAddingMode(null);
     setSelectedFieldId(id);
   };
@@ -202,28 +239,19 @@ function App() {
   const updateField = (id, props) => {
     setFields(fields.map(f => f.id === id ? { ...f, ...props } : f));
   };
-
   const deleteField = (id) => {
     setFields(fields.filter(f => f.id !== id));
     setSelectedFieldId(null);
   };
-
   const duplicateField = (field) => {
     const newId = genId();
-    setFields([...fields, {
-      ...field,
-      id: newId,
-      x: field.x + 20, 
-      y: field.y + 20,
-      name: `${field.name}_copy`
-    }]);
+    setFields([...fields, { ...field, id: newId, x: field.x + 20, y: field.y + 20, name: `${field.name}_copy` }]);
     setSelectedFieldId(newId);
   };
 
   const handleDragStop = (e, d, fieldId) => {
     const boxRect = d.node.getBoundingClientRect();
     const boxCenterY = boxRect.top + (boxRect.height / 2);
-
     for (let i = 0; i < numPages; i++) {
       const pageEl = pageRefs.current[i];
       if (pageEl) {
@@ -243,7 +271,6 @@ function App() {
     const formData = new FormData();
     formData.append('pdf', file);
     formData.append('fields', JSON.stringify(fields));
-
     try {
       const res = await axios.post('http://localhost:5000/process-pdf', formData, { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -255,122 +282,60 @@ function App() {
     } catch(err) { console.error(err); }
   };
 
+  if (isLoading) return <div className="flex h-screen items-center justify-center text-blue-600">Restoring your session...</div>;
+
   return (
     <div className={`bg-slate-50 min-h-screen font-sans ${addingMode ? 'cursor-crosshair' : ''}`}>
+      <style>{`.react-pdf__Page { margin: 0 !important; } .react-pdf__Page__canvas { display: block !important; }`}</style>
       
-      {/* --- GLOBAL STYLES --- */}
-      <style>{`
-        .react-pdf__Page { margin: 0 !important; }
-        .react-pdf__Page__canvas { display: block !important; }
-      `}</style>
-
-      {/* --- NAVBAR --- */}
       <nav className="fixed top-0 left-0 w-full h-16 bg-white border-b border-gray-200 shadow-sm z-50 flex items-center justify-between px-6">
         <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">
-                F
-            </div>
+            <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold text-lg">F</div>
             <span className="text-xl font-bold text-gray-800 tracking-tight">FormForge</span>
         </div>
-        
-        {/* Editor Actions (Visible only when file loaded) */}
         {file && (
           <div className="flex items-center gap-3">
-             <button 
-                onClick={() => setAddingMode(addingMode === 'text' ? null : 'text')} 
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${addingMode === 'text' ? 'bg-blue-600 text-white shadow-md transform scale-105' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-             >
+             <button onClick={() => setAddingMode(addingMode === 'text' ? null : 'text')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${addingMode === 'text' ? 'bg-blue-600 text-white shadow-md transform scale-105' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                <span className="text-lg font-serif">T</span> Text
              </button>
-             
-             <button 
-                onClick={() => setAddingMode(addingMode === 'checkbox' ? null : 'checkbox')} 
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${addingMode === 'checkbox' ? 'bg-green-600 text-white shadow-md transform scale-105' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}
-             >
+             <button onClick={() => setAddingMode(addingMode === 'checkbox' ? null : 'checkbox')} className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${addingMode === 'checkbox' ? 'bg-green-600 text-white shadow-md transform scale-105' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
                <span>☑</span> Checkbox
              </button>
-
-             {addingMode && (
-                 <span className="text-xs text-blue-600 font-bold animate-pulse ml-2 hidden lg:block uppercase tracking-wide">
-                     Click to place
-                 </span>
-             )}
-
+             {addingMode && <span className="text-xs text-blue-600 font-bold animate-pulse ml-2 hidden lg:block uppercase tracking-wide">Click to place</span>}
              <div className="h-6 w-px bg-gray-300 mx-2"></div>
-             
-             <button onClick={handleSave} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg transition-all transform hover:-translate-y-0.5">
-               Apply Changes
-             </button>
+             <button onClick={handleReset} title="Reset / Clear All" className="p-2 text-gray-400 hover:text-red-500 transition-colors"><Icons.Reset /></button>
+             <button onClick={handleSave} className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg transition-all transform hover:-translate-y-0.5">Apply Changes</button>
           </div>
         )}
       </nav>
 
-      {/* --- CONTENT AREA --- */}
       <div className="pt-20 pb-10 min-h-screen flex flex-col items-center">
-        
-        {/* VIEW 1: UPLOAD SCREEN */}
         {!file && (
             <div className="flex-grow flex items-center justify-center w-full px-4">
                 <div className="bg-white rounded-3xl shadow-2xl p-12 max-w-xl w-full text-center border border-gray-100 transition-all hover:shadow-3xl">
-                    <div 
-                        className="border-2 border-dashed border-blue-200 rounded-2xl p-10 flex flex-col items-center justify-center bg-blue-50/30 transition-colors hover:bg-blue-50 hover:border-blue-400"
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={handleDrop}
-                    >
+                    <div className="border-2 border-dashed border-blue-200 rounded-2xl p-10 flex flex-col items-center justify-center bg-blue-50/30 transition-colors hover:bg-blue-50 hover:border-blue-400" onDragOver={(e) => e.preventDefault()} onDrop={handleDrop}>
                         <Icons.Upload />
                         <h2 className="text-2xl font-bold text-gray-800 mb-2">Drag and Drop files to upload</h2>
                         <p className="text-gray-400 mb-6">or</p>
-                        
-                        <input 
-                            type="file" 
-                            ref={fileInputRef}
-                            onChange={handleFileChange} 
-                            accept="application/pdf"
-                            hidden 
-                        />
-                        
-                        <button 
-                            onClick={() => fileInputRef.current.click()}
-                            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-semibold shadow-lg transition-transform transform hover:scale-105 active:scale-95"
-                        >
-                            Browse Files
-                        </button>
-
+                        <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="application/pdf" hidden />
+                        <button onClick={() => fileInputRef.current.click()} className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-full font-semibold shadow-lg transition-transform transform hover:scale-105 active:scale-95">Browse Files</button>
                         <p className="mt-6 text-sm text-gray-400 font-medium">Supported files: PDF</p>
                     </div>
                 </div>
             </div>
         )}
 
-        {/* VIEW 2: PDF EDITOR */}
         {file && (
           <div className="w-full flex justify-center p-4">
              <Document file={file} onLoadSuccess={onDocumentLoadSuccess} className="flex flex-col gap-8">
                 {Array.from(new Array(numPages), (_, i) => (
-                  <div 
-                    key={i} 
-                    className="relative bg-white shadow-xl transition-shadow hover:shadow-2xl"
-                    style={{ width: '800px' }} 
-                    ref={el => pageRefs.current[i] = el}
-                    onClick={(e) => handlePageClick(e, i)}
-                  >
-                    <Page 
-                      pageNumber={i + 1} 
-                      renderTextLayer={false} 
-                      renderAnnotationLayer={false} 
-                      width={800} 
-                    />
-                    
+                  <div key={i} className="relative bg-white shadow-xl transition-shadow hover:shadow-2xl" style={{ width: '800px' }} ref={el => pageRefs.current[i] = el} onClick={(e) => handlePageClick(e, i)}>
+                    <Page pageNumber={i + 1} renderTextLayer={false} renderAnnotationLayer={false} width={800} />
                     {fields.filter(f => f.page === i).map(field => (
                       <DraggableField 
-                        key={field.id}
-                        field={field}
-                        isSelected={selectedFieldId === field.id}
-                        onSelect={setSelectedFieldId}
-                        onUpdate={updateField}
-                        onDelete={deleteField}
-                        onDuplicate={duplicateField}
-                        onDragStopRaw={handleDragStop}
+                        key={field.id} field={field} isSelected={selectedFieldId === field.id}
+                        onSelect={setSelectedFieldId} onUpdate={updateField} onDelete={deleteField}
+                        onDuplicate={duplicateField} onDragStopRaw={handleDragStop}
                       />
                     ))}
                   </div>
